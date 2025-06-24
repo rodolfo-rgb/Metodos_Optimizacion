@@ -1,110 +1,131 @@
-import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ArrowLeft, Play, RotateCcw, Plus, Minus } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { useState } from "react"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { ArrowLeft, Play, RotateCcw, Plus, Minus } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { toast } from "sonner"
+
+type Source = { supply: string }
+type Destination = { demand: string }
+
+type Solution = {
+  allocation: number[][]
+  totalCost: number
+  steps: string[]
+}
 
 const CostoMinimo = () => {
-  const navigate = useNavigate();
-  const [sources, setSources] = useState([{ supply: "" }]);
-  const [destinations, setDestinations] = useState([{ demand: "" }]);
-  const [costs, setCosts] = useState([[""]]);
-  const [solution, setSolution] = useState(null);
+  const navigate = useNavigate()
+
+  const [sources, setSources] = useState<Source[]>([{ supply: "" }])
+  const [destinations, setDestinations] = useState<Destination[]>([{ demand: "" }])
+  const [costs, setCosts] = useState<string[][]>([[""]])
+  const [solution, setSolution] = useState<Solution | null>(null)
 
   const addSource = () => {
-    setSources([...sources, { supply: "" }]);
-    const newCosts = [...costs, new Array(destinations.length).fill("")];
-    setCosts(newCosts);
-  };
+    setSources([...sources, { supply: "" }])
+    setCosts([...costs, new Array(destinations.length).fill("")])
+  }
 
   const addDestination = () => {
-    setDestinations([...destinations, { demand: "" }]);
-    const newCosts = costs.map(row => [...row, ""]);
-    setCosts(newCosts);
-  };
+    setDestinations([...destinations, { demand: "" }])
+    setCosts(costs.map(row => [...row, ""]))
+  }
 
-  const removeSource = (index) => {
+  const removeSource = (index: number) => {
     if (sources.length > 1) {
-      const newSources = sources.filter((_, i) => i !== index);
-      const newCosts = costs.filter((_, i) => i !== index);
-      setSources(newSources);
-      setCosts(newCosts);
+      setSources(sources.filter((_, i) => i !== index))
+      setCosts(costs.filter((_, i) => i !== index))
     }
-  };
+  }
 
-  const removeDestination = (index) => {
+  const removeDestination = (index: number) => {
     if (destinations.length > 1) {
-      const newDestinations = destinations.filter((_, i) => i !== index);
-      const newCosts = costs.map(row => row.filter((_, i) => i !== index));
-      setDestinations(newDestinations);
-      setCosts(newCosts);
+      setDestinations(destinations.filter((_, i) => i !== index))
+      setCosts(costs.map(row => row.filter((_, i) => i !== index)))
     }
-  };
+  }
 
-  const updateSource = (index, supply) => {
-    const newSources = [...sources];
-    newSources[index].supply = supply;
-    setSources(newSources);
-  };
+  const updateSource = (index: number, supply: string) => {
+    const newSources = [...sources]
+    newSources[index].supply = supply
+    setSources(newSources)
+  }
 
-  const updateDestination = (index, demand) => {
-    const newDestinations = [...destinations];
-    newDestinations[index].demand = demand;
-    setDestinations(newDestinations);
-  };
+  const updateDestination = (index: number, demand: string) => {
+    const newDestinations = [...destinations]
+    newDestinations[index].demand = demand
+    setDestinations(newDestinations)
+  }
 
-  const updateCost = (sourceIndex, destIndex, cost) => {
-    const newCosts = [...costs];
-    newCosts[sourceIndex][destIndex] = cost;
-    setCosts(newCosts);
-  };
+  const updateCost = (sourceIndex: number, destIndex: number, cost: string) => {
+    const newCosts = [...costs]
+    newCosts[sourceIndex][destIndex] = cost
+    setCosts(newCosts)
+  }
 
   const solveProblem = () => {
-    // Validación básica
-    const totalSupply = sources.reduce((sum, s) => sum + parseFloat(s.supply || "0"), 0);
-    const totalDemand = destinations.reduce((sum, d) => sum + parseFloat(d.demand || "0"), 0);
+    const totalSupply = sources.reduce((sum, s) => sum + parseFloat(s.supply || "0"), 0)
+    const totalDemand = destinations.reduce((sum, d) => sum + parseFloat(d.demand || "0"), 0)
+
+    const allCostsValid = costs.every(row =>
+      row.every(cell => cell !== "" && !isNaN(parseFloat(cell)))
+    )
+
+    if (!allCostsValid) {
+      toast.error("Por favor, complete todos los costos con valores numéricos válidos.")
+      return
+    }
 
     if (Math.abs(totalSupply - totalDemand) > 0.001) {
-      toast.error("La oferta total debe ser igual a la demanda total");
-      return;
+      toast.error("La oferta total debe ser igual a la demanda total.")
+      return
     }
 
     try {
-      const result = solveTransportationProblem();
-      setSolution(result);
-      toast.success("Problema resuelto exitosamente");
+      const result = solveTransportationProblem()
+      setSolution(result)
+      toast.success("Problema resuelto exitosamente")
     } catch (error) {
-      toast.error("Error al resolver el problema");
+      toast.error("Error al resolver el problema.")
     }
-  };
+  }
 
-  const solveTransportationProblem = () => {
-    // Implementación simplificada del método de costo mínimo
-    const supply = sources.map(s => parseFloat(s.supply));
-    const demand = destinations.map(d => parseFloat(d.demand));
-    const costMatrix = costs.map(row => row.map(cost => parseFloat(cost)));
+  const solveTransportationProblem = (): Solution => {
+    const supply = sources.map(s => parseFloat(s.supply))
+    const demand = destinations.map(d => parseFloat(d.demand))
+    const costMatrix = costs.map(row =>
+      row.map(c => {
+        const parsed = parseFloat(c)
+        return isNaN(parsed) ? 0 : parsed
+      })
+    )
 
-    // Método de la esquina noroeste simplificado
-    const allocation = Array(sources.length).fill(null).map(() => Array(destinations.length).fill(0));
-    let totalCost = 0;
+    const allocation = Array(supply.length).fill(null).map(() => Array(demand.length).fill(0))
+    let totalCost = 0
+    const supplyCopy = [...supply]
+    const demandCopy = [...demand]
 
-    const supplyCopy = [...supply];
-    const demandCopy = [...demand];
+    let i = 0
+    let j = 0
+    while (i < supply.length && j < demand.length) {
+      const alloc = Math.min(supplyCopy[i], demandCopy[j])
+      allocation[i][j] = alloc
+      totalCost += alloc * costMatrix[i][j]
 
-    let i = 0, j = 0;
-    while (i < sources.length && j < destinations.length) {
-      const allocation_amount = Math.min(supplyCopy[i], demandCopy[j]);
-      allocation[i][j] = allocation_amount;
-      totalCost += allocation_amount * costMatrix[i][j];
+      supplyCopy[i] -= alloc
+      demandCopy[j] -= alloc
 
-      supplyCopy[i] -= allocation_amount;
-      demandCopy[j] -= allocation_amount;
-
-      if (supplyCopy[i] === 0) i++;
-      if (demandCopy[j] === 0) j++;
+      if (supplyCopy[i] === 0) i++
+      if (demandCopy[j] === 0) j++
     }
 
     return {
@@ -116,15 +137,15 @@ const CostoMinimo = () => {
         "3. Asignar la cantidad máxima posible en cada celda",
         "4. Calcular el costo total de transporte"
       ]
-    };
-  };
+    }
+  }
 
   const resetForm = () => {
-    setSources([{ supply: "" }]);
-    setDestinations([{ demand: "" }]);
-    setCosts([[""]]);
-    setSolution(null);
-  };
+    setSources([{ supply: "" }])
+    setDestinations([{ demand: "" }])
+    setCosts([[""]])
+    setSolution(null)
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100">
@@ -133,12 +154,7 @@ const CostoMinimo = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/")}
-                className="flex items-center space-x-2"
-              >
+              <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
                 <ArrowLeft className="h-4 w-4" />
                 <span>Volver</span>
               </Button>
@@ -150,7 +166,7 @@ const CostoMinimo = () => {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid lg:grid-cols-2 gap-8">
-          {/* Input Form */}
+          {/* Formulario */}
           <Card>
             <CardHeader>
               <CardTitle>Problema de Transporte</CardTitle>
@@ -159,7 +175,7 @@ const CostoMinimo = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Orígenes */}
+              {/* Fuentes */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-base font-semibold">Orígenes (Oferta)</Label>
@@ -250,7 +266,9 @@ const CostoMinimo = () => {
                                 type="number"
                                 placeholder="Costo"
                                 value={costs[sourceIndex]?.[destIndex] || ""}
-                                onChange={(e) => updateCost(sourceIndex, destIndex, e.target.value)}
+                                onChange={(e) =>
+                                  updateCost(sourceIndex, destIndex, e.target.value)
+                                }
                                 className="w-full"
                               />
                             </td>
@@ -262,7 +280,7 @@ const CostoMinimo = () => {
                 </div>
               </div>
 
-              {/* Botones de acción */}
+              {/* Botones */}
               <div className="flex space-x-3">
                 <Button onClick={solveProblem} className="flex-1 bg-purple-600 hover:bg-purple-700">
                   <Play className="h-4 w-4 mr-2" />
@@ -276,7 +294,7 @@ const CostoMinimo = () => {
             </CardContent>
           </Card>
 
-          {/* Results */}
+          {/* Resultados */}
           {solution && (
             <Card>
               <CardHeader>
@@ -313,9 +331,12 @@ const CostoMinimo = () => {
                             <td className="border border-gray-300 p-2 bg-gray-100 font-semibold">
                               O{sourceIndex + 1}
                             </td>
-                            {row.map((allocation, destIndex) => (
-                              <td key={destIndex} className="border border-gray-300 p-2 text-center">
-                                {allocation > 0 ? allocation.toFixed(0) : "-"}
+                            {row.map((value, destIndex) => (
+                              <td
+                                key={destIndex}
+                                className="border border-gray-300 p-2 text-center"
+                              >
+                                {value > 0 ? Math.round(value) : "-"}
                               </td>
                             ))}
                           </tr>
@@ -329,7 +350,9 @@ const CostoMinimo = () => {
                   <h3 className="font-semibold mb-2">Pasos de Solución</h3>
                   <ol className="list-decimal list-inside space-y-1 text-sm">
                     {solution.steps.map((step, index) => (
-                      <li key={index} className="text-gray-700">{step}</li>
+                      <li key={index} className="text-gray-700">
+                        {step}
+                      </li>
                     ))}
                   </ol>
                 </div>
@@ -339,7 +362,7 @@ const CostoMinimo = () => {
         </div>
       </main>
     </div>
-  );
-};
+  )
+}
 
-export default CostoMinimo;
+export default CostoMinimo

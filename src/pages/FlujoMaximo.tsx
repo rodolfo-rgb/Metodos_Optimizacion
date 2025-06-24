@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,11 +13,28 @@ import { ArrowLeft, Play, RotateCcw, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+interface Edge {
+  from: string;
+  to: string;
+  capacity: string;
+}
+
+interface PathInfo {
+  path: string[];
+  flow: number;
+}
+
+interface Solution {
+  maxFlow: number;
+  paths: PathInfo[];
+  steps: string[];
+}
+
 const FlujoMaximo = () => {
   const navigate = useNavigate();
-  const [nodes, setNodes] = useState(["S", "T"]);
-  const [edges, setEdges] = useState([{ from: "", to: "", capacity: "" }]);
-  const [solution, setSolution] = useState(null);
+  const [nodes, setNodes] = useState<string[]>(["S", "T"]);
+  const [edges, setEdges] = useState<Edge[]>([{ from: "", to: "", capacity: "" }]);
+  const [solution, setSolution] = useState<Solution | null>(null);
 
   const addNode = () => {
     const nodeNumber = nodes.length - 1;
@@ -22,20 +45,19 @@ const FlujoMaximo = () => {
     setEdges([...edges, { from: "", to: "", capacity: "" }]);
   };
 
-  const updateEdge = (index, field, value) => {
+  const updateEdge = (index: number, field: keyof Edge, value: string) => {
     const newEdges = [...edges];
     newEdges[index][field] = value;
     setEdges(newEdges);
   };
 
-  const removeEdge = (index) => {
+  const removeEdge = (index: number) => {
     if (edges.length > 1) {
       setEdges(edges.filter((_, i) => i !== index));
     }
   };
 
   const solveProblem = () => {
-    // Validación básica
     if (edges.some(edge => !edge.from || !edge.to || !edge.capacity)) {
       toast.error("Por favor, complete todas las aristas");
       return;
@@ -50,12 +72,10 @@ const FlujoMaximo = () => {
     }
   };
 
-  const fordFulkerson = () => {
-    // Implementación simplificada del algoritmo Ford-Fulkerson
-    const adjacencyList = {};
-    const capacities = {};
+  const fordFulkerson = (): Solution => {
+    const adjacencyList: Record<string, string[]> = {};
+    const capacities: Record<string, number> = {};
 
-    // Inicializar estructura de datos
     nodes.forEach(node => {
       adjacencyList[node] = [];
     });
@@ -79,25 +99,21 @@ const FlujoMaximo = () => {
     });
 
     let maxFlow = 0;
-    const flows = {};
-
-    // Inicializar flujos
+    const flows: Record<string, number> = {};
     Object.keys(capacities).forEach(key => {
       flows[key] = 0;
     });
 
-    // Algoritmo simplificado - encontrar caminos aumentantes
-    const paths = [];
+    const paths: PathInfo[] = [];
     let iterations = 0;
 
-    while (iterations < 10) { // Límite para evitar bucles infinitos
+    while (iterations < 10) {
       const path = findAugmentingPath(adjacencyList, capacities, flows, "S", "T");
       if (!path || path.length === 0) break;
 
       const bottleneck = findBottleneck(path, capacities, flows);
       if (bottleneck <= 0) break;
 
-      // Actualizar flujos
       for (let i = 0; i < path.length - 1; i++) {
         const from = path[i];
         const to = path[i + 1];
@@ -118,21 +134,24 @@ const FlujoMaximo = () => {
         "2. Buscar camino aumentante desde fuente a sumidero",
         "3. Encontrar la capacidad mínima en el camino (cuello de botella)",
         "4. Actualizar flujos en el camino encontrado",
-        "5. Repetir hasta que no existan más caminos aumentantes"
-      ]
+        "5. Repetir hasta que no existan más caminos aumentantes",
+      ],
     };
   };
 
-  const findAugmentingPath = (adjacencyList, capacities, flows, source, sink) => {
-    const visited = new Set();
-    const queue = [{ node: source, path: [source] }];
+  const findAugmentingPath = (
+    adjacencyList: Record<string, string[]>,
+    capacities: Record<string, number>,
+    flows: Record<string, number>,
+    source: string,
+    sink: string
+  ): string[] | null => {
+    const visited = new Set<string>();
+    const queue: { node: string; path: string[] }[] = [{ node: source, path: [source] }];
 
     while (queue.length > 0) {
-      const { node, path } = queue.shift();
-      
-      if (node === sink) {
-        return path;
-      }
+      const { node, path } = queue.shift()!;
+      if (node === sink) return path;
 
       if (visited.has(node)) continue;
       visited.add(node);
@@ -141,7 +160,7 @@ const FlujoMaximo = () => {
         const edgeKey = `${node}-${neighbor}`;
         const capacity = capacities[edgeKey] || 0;
         const flow = flows[edgeKey] || 0;
-        
+
         if (!visited.has(neighbor) && capacity > flow) {
           queue.push({ node: neighbor, path: [...path, neighbor] });
         }
@@ -151,7 +170,11 @@ const FlujoMaximo = () => {
     return null;
   };
 
-  const findBottleneck = (path, capacities, flows) => {
+  const findBottleneck = (
+    path: string[],
+    capacities: Record<string, number>,
+    flows: Record<string, number>
+  ): number => {
     let minCapacity = Infinity;
 
     for (let i = 0; i < path.length - 1; i++) {
@@ -174,6 +197,7 @@ const FlujoMaximo = () => {
     setSolution(null);
   };
 
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100">
       {/* Header */}
