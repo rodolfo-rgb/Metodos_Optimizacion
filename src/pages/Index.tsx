@@ -126,7 +126,7 @@ const Index = () => {
       
       
       {/* Footer */}
-      <footer className="text-black py-1">
+      <footer className="bg-white py-2">
         <div className="container mx-auto px-6 text-center">
           <p className="text-gray-700">
             © 2025 Equipo 3 - Métodos Cuantitativos.
