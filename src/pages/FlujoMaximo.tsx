@@ -1,17 +1,14 @@
 import { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ArrowLeft, Play, RotateCcw, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import FlowNetworkVisualization from "@/components/FlowNetworkVisualization";
+import SolutionSteps from "@/components/SolutionSteps";
 
 interface Edge {
   from: string;
@@ -19,15 +16,23 @@ interface Edge {
   capacity: string;
 }
 
-interface PathInfo {
-  path: string[];
-  flow: number;
-}
-
 interface Solution {
   maxFlow: number;
-  paths: PathInfo[];
+  paths: Array<{ path: string[]; flow: number }>;
+  algorithm: string;
   steps: string[];
+}
+
+interface AdjacencyList {
+  [key: string]: string[];
+}
+
+interface Capacities {
+  [key: string]: number;
+}
+
+interface Flows {
+  [key: string]: number;
 }
 
 const FlujoMaximo = () => {
@@ -35,52 +40,66 @@ const FlujoMaximo = () => {
   const [nodes, setNodes] = useState<string[]>(["S", "T"]);
   const [edges, setEdges] = useState<Edge[]>([{ from: "", to: "", capacity: "" }]);
   const [solution, setSolution] = useState<Solution | null>(null);
+  const [algorithm, setAlgorithm] = useState<string>("ford-fulkerson");
 
-  const addNode = () => {
+  const addNode = (): void => {
     const nodeNumber = nodes.length - 1;
     setNodes([...nodes.slice(0, -1), `N${nodeNumber}`, "T"]);
   };
 
-  const addEdge = () => {
+  const addEdge = (): void => {
     setEdges([...edges, { from: "", to: "", capacity: "" }]);
   };
 
-  const updateEdge = (index: number, field: keyof Edge, value: string) => {
+  const updateEdge = (index: number, field: keyof Edge, value: string): void => {
     const newEdges = [...edges];
     newEdges[index][field] = value;
     setEdges(newEdges);
   };
 
-  const removeEdge = (index: number) => {
+  const removeEdge = (index: number): void => {
     if (edges.length > 1) {
       setEdges(edges.filter((_, i) => i !== index));
     }
   };
 
-  const solveProblem = () => {
+  const solveProblem = (): void => {
+    // Validación básica
     if (edges.some(edge => !edge.from || !edge.to || !edge.capacity)) {
       toast.error("Por favor, complete todas las aristas");
       return;
     }
 
     try {
-      const result = fordFulkerson();
+      let result: Solution;
+      switch (algorithm) {
+        case "ford-fulkerson":
+          result = fordFulkerson();
+          break;
+        case "edmonds-karp":
+          result = edmondsKarp();
+          break;
+        default:
+          result = fordFulkerson();
+      }
       setSolution(result);
-      toast.success("Flujo máximo calculado exitosamente");
+      toast.success(`Flujo máximo calculado con ${algorithm}`);
     } catch (error) {
       toast.error("Error al calcular el flujo máximo");
     }
   };
 
   const fordFulkerson = (): Solution => {
-    const adjacencyList: Record<string, string[]> = {};
-    const capacities: Record<string, number> = {};
+    // Implementación simplificada del algoritmo Ford-Fulkerson
+    const adjacencyList: AdjacencyList = {};
+    const capacities: Capacities = {};
 
-    nodes.forEach(node => {
+    // Inicializar estructura de datos
+    nodes.forEach((node: string) => {
       adjacencyList[node] = [];
     });
 
-    edges.forEach(edge => {
+    edges.forEach((edge: Edge) => {
       const from = edge.from;
       const to = edge.to;
       const capacity = parseFloat(edge.capacity);
@@ -99,16 +118,90 @@ const FlujoMaximo = () => {
     });
 
     let maxFlow = 0;
-    const flows: Record<string, number> = {};
-    Object.keys(capacities).forEach(key => {
+    const flows: Flows = {};
+
+    // Inicializar flujos
+    Object.keys(capacities).forEach((key: string) => {
       flows[key] = 0;
     });
 
-    const paths: PathInfo[] = [];
+    // Algoritmo simplificado - encontrar caminos aumentantes
+    const paths: Array<{ path: string[]; flow: number }> = [];
+    let iterations = 0;
+
+    while (iterations < 10) { // Límite para evitar bucles infinitos
+      const path = findAugmentingPath(adjacencyList, capacities, flows, "S", "T");
+      if (!path || path.length === 0) break;
+
+      const bottleneck = findBottleneck(path, capacities, flows);
+      if (bottleneck <= 0) break;
+
+      // Actualizar flujos
+      for (let i = 0; i < path.length - 1; i++) {
+        const from = path[i];
+        const to = path[i + 1];
+        flows[`${from}-${to}`] = (flows[`${from}-${to}`] || 0) + bottleneck;
+        flows[`${to}-${from}`] = (flows[`${to}-${from}`] || 0) - bottleneck;
+      }
+
+      maxFlow += bottleneck;
+      paths.push({ path: [...path], flow: bottleneck });
+      iterations++;
+    }
+
+    return {
+      maxFlow,
+      paths,
+      algorithm: "Ford-Fulkerson",
+      steps: [
+        "1. Inicializar la red con capacidades originales",
+        "2. Buscar camino aumentante desde fuente a sumidero usando DFS",
+        "3. Encontrar la capacidad mínima en el camino (cuello de botella)",
+        "4. Actualizar flujos en el camino encontrado",
+        "5. Repetir hasta que no existan más caminos aumentantes"
+      ]
+    };
+  };
+
+  const edmondsKarp = (): Solution => {
+    // Implementación de Edmonds-Karp (Ford-Fulkerson con BFS)
+    const adjacencyList: AdjacencyList = {};
+    const capacities: Capacities = {};
+
+    nodes.forEach((node: string) => {
+      adjacencyList[node] = [];
+    });
+
+    edges.forEach((edge: Edge) => {
+      const from = edge.from;
+      const to = edge.to;
+      const capacity = parseFloat(edge.capacity);
+
+      if (!adjacencyList[from].includes(to)) {
+        adjacencyList[from].push(to);
+      }
+      if (!adjacencyList[to].includes(from)) {
+        adjacencyList[to].push(from);
+      }
+
+      capacities[`${from}-${to}`] = capacity;
+      if (!capacities[`${to}-${from}`]) {
+        capacities[`${to}-${from}`] = 0;
+      }
+    });
+
+    let maxFlow = 0;
+    const flows: Flows = {};
+    Object.keys(capacities).forEach((key: string) => {
+      flows[key] = 0;
+    });
+
+    const paths: Array<{ path: string[]; flow: number }> = [];
     let iterations = 0;
 
     while (iterations < 10) {
-      const path = findAugmentingPath(adjacencyList, capacities, flows, "S", "T");
+      // Usar BFS en lugar de DFS
+      const path = findAugmentingPathBFS(adjacencyList, capacities, flows, "S", "T");
       if (!path || path.length === 0) break;
 
       const bottleneck = findBottleneck(path, capacities, flows);
@@ -129,29 +222,30 @@ const FlujoMaximo = () => {
     return {
       maxFlow,
       paths,
+      algorithm: "Edmonds-Karp",
       steps: [
         "1. Inicializar la red con capacidades originales",
-        "2. Buscar camino aumentante desde fuente a sumidero",
-        "3. Encontrar la capacidad mínima en el camino (cuello de botella)",
-        "4. Actualizar flujos en el camino encontrado",
-        "5. Repetir hasta que no existan más caminos aumentantes",
-      ],
+        "2. Buscar camino aumentante más corto usando BFS",
+        "3. Encontrar la capacidad mínima en el camino",
+        "4. Actualizar flujos residuales",
+        "5. Repetir hasta que no existan más caminos aumentantes"
+      ]
     };
   };
 
-  const findAugmentingPath = (
-    adjacencyList: Record<string, string[]>,
-    capacities: Record<string, number>,
-    flows: Record<string, number>,
-    source: string,
-    sink: string
-  ): string[] | null => {
+  const findAugmentingPath = (adjacencyList: AdjacencyList, capacities: Capacities, flows: Flows, source: string, sink: string): string[] | null => {
     const visited = new Set<string>();
-    const queue: { node: string; path: string[] }[] = [{ node: source, path: [source] }];
+    const queue: Array<{ node: string; path: string[] }> = [{ node: source, path: [source] }];
 
     while (queue.length > 0) {
-      const { node, path } = queue.shift()!;
-      if (node === sink) return path;
+      const current = queue.shift();
+      if (!current) continue;
+      
+      const { node, path } = current;
+      
+      if (node === sink) {
+        return path;
+      }
 
       if (visited.has(node)) continue;
       visited.add(node);
@@ -160,7 +254,7 @@ const FlujoMaximo = () => {
         const edgeKey = `${node}-${neighbor}`;
         const capacity = capacities[edgeKey] || 0;
         const flow = flows[edgeKey] || 0;
-
+        
         if (!visited.has(neighbor) && capacity > flow) {
           queue.push({ node: neighbor, path: [...path, neighbor] });
         }
@@ -170,11 +264,37 @@ const FlujoMaximo = () => {
     return null;
   };
 
-  const findBottleneck = (
-    path: string[],
-    capacities: Record<string, number>,
-    flows: Record<string, number>
-  ): number => {
+  const findAugmentingPathBFS = (adjacencyList: AdjacencyList, capacities: Capacities, flows: Flows, source: string, sink: string): string[] | null => {
+    const visited = new Set<string>();
+    const queue: Array<{ node: string; path: string[] }> = [{ node: source, path: [source] }];
+    visited.add(source);
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+      
+      const { node, path } = current;
+      
+      if (node === sink) {
+        return path;
+      }
+
+      for (const neighbor of adjacencyList[node] || []) {
+        const edgeKey = `${node}-${neighbor}`;
+        const capacity = capacities[edgeKey] || 0;
+        const flow = flows[edgeKey] || 0;
+        
+        if (!visited.has(neighbor) && capacity > flow) {
+          visited.add(neighbor);
+          queue.push({ node: neighbor, path: [...path, neighbor] });
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const findBottleneck = (path: string[], capacities: Capacities, flows: Flows): number => {
     let minCapacity = Infinity;
 
     for (let i = 0; i < path.length - 1; i++) {
@@ -191,13 +311,12 @@ const FlujoMaximo = () => {
     return minCapacity === Infinity ? 0 : minCapacity;
   };
 
-  const resetForm = () => {
+  const resetForm = (): void => {
     setNodes(["S", "T"]);
     setEdges([{ from: "", to: "", capacity: "" }]);
     setSolution(null);
   };
 
-  
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100">
       {/* Header */}
@@ -221,16 +340,31 @@ const FlujoMaximo = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid lg:grid-cols-2 gap-8">
+        <div className="grid lg:grid-cols-3 gap-8">
           {/* Input Form */}
           <Card>
             <CardHeader>
-              <CardTitle>Red de Flujo</CardTitle>
+              <CardTitle>Configuración de Red</CardTitle>
               <CardDescription>
                 Configure los nodos y aristas de la red para calcular el flujo máximo
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Selección de Algoritmo */}
+              <div>
+                <Label className="text-base font-semibold mb-3 block">Algoritmo</Label>
+                <RadioGroup value={algorithm} onValueChange={setAlgorithm}>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="ford-fulkerson" id="ford-fulkerson" />
+                    <Label htmlFor="ford-fulkerson">Ford-Fulkerson</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="edmonds-karp" id="edmonds-karp" />
+                    <Label htmlFor="edmonds-karp">Edmonds-Karp</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
               {/* Nodos */}
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -241,7 +375,7 @@ const FlujoMaximo = () => {
                   </Button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {nodes.map((node, index) => (
+                  {nodes.map((node: string, index: number) => (
                     <div key={index} className="bg-blue-100 px-3 py-1 rounded-full text-sm font-medium">
                       {node}
                     </div>
@@ -259,7 +393,7 @@ const FlujoMaximo = () => {
                   </Button>
                 </div>
                 
-                {edges.map((edge, index) => (
+                {edges.map((edge: Edge, index: number) => (
                   <div key={index} className="flex items-center space-x-2 mb-3 p-3 border rounded-lg">
                     <select
                       value={edge.from}
@@ -267,7 +401,7 @@ const FlujoMaximo = () => {
                       className="px-3 py-1 border rounded"
                     >
                       <option value="">Desde</option>
-                      {nodes.map(node => (
+                      {nodes.map((node: string) => (
                         <option key={node} value={node}>{node}</option>
                       ))}
                     </select>
@@ -278,7 +412,7 @@ const FlujoMaximo = () => {
                       className="px-3 py-1 border rounded"
                     >
                       <option value="">Hacia</option>
-                      {nodes.map(node => (
+                      {nodes.map((node: string) => (
                         <option key={node} value={node}>{node}</option>
                       ))}
                     </select>
@@ -306,7 +440,7 @@ const FlujoMaximo = () => {
               <div className="flex space-x-3">
                 <Button onClick={solveProblem} className="flex-1 bg-green-600 hover:bg-green-700">
                   <Play className="h-4 w-4 mr-2" />
-                  Calcular Flujo Máximo
+                  Calcular Flujo
                 </Button>
                 <Button onClick={resetForm} variant="outline">
                   <RotateCcw className="h-4 w-4 mr-2" />
@@ -316,50 +450,55 @@ const FlujoMaximo = () => {
             </CardContent>
           </Card>
 
-          {/* Results */}
-          {solution && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Flujo Máximo</CardTitle>
-                <CardDescription>
-                  Resultado del algoritmo Ford-Fulkerson
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-green-800 mb-2">Flujo Máximo</h3>
-                  <p className="text-green-700 text-3xl font-bold">
-                    {solution.maxFlow}
-                  </p>
-                </div>
+          {/* Visualization */}
+          <div className="lg:col-span-2 space-y-6">
+            <FlowNetworkVisualization 
+              nodes={nodes} 
+              edges={edges.filter(e => e.from && e.to && e.capacity).map(e => ({
+                from: e.from,
+                to: e.to,
+                capacity: parseFloat(e.capacity)
+              }))}
+              paths={solution?.paths || []}
+            />
 
-                <div>
-                  <h3 className="font-semibold mb-2">Caminos Aumentantes</h3>
-                  <div className="space-y-2">
-                    {solution.paths.map((pathInfo, index) => (
-                      <div key={index} className="bg-gray-50 p-3 rounded">
-                        <p className="text-sm">
-                          <span className="font-medium">Camino {index + 1}:</span> {pathInfo.path.join(" → ")}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          Flujo: {pathInfo.flow}
-                        </p>
+            {/* Results */}
+            {solution && (
+              <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Resultado - {solution.algorithm}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <h3 className="font-semibold text-green-800 mb-2">Flujo Máximo</h3>
+                      <p className="text-green-700 text-3xl font-bold">
+                        {solution.maxFlow}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold mb-2">Caminos Aumentantes</h3>
+                      <div className="space-y-2">
+                        {solution.paths.map((pathInfo: { path: string[]; flow: number }, index: number) => (
+                          <div key={index} className="bg-gray-50 p-3 rounded">
+                            <p className="text-sm">
+                              <span className="font-medium">Camino {index + 1}:</span> {pathInfo.path.join(" → ")}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Flujo: {pathInfo.flow}
+                            </p>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-                <div>
-                  <h3 className="font-semibold mb-2">Pasos del Algoritmo</h3>
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
-                    {solution.steps.map((step, index) => (
-                      <li key={index} className="text-gray-700">{step}</li>
-                    ))}
-                  </ol>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                <SolutionSteps steps={solution.steps} />
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>
